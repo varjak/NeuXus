@@ -177,7 +177,6 @@ class UdpSend(Node):
       - input_port (Port): inout data port
       - ip (str): IP address of UDP server which receive data
       - port (int): socket port
-
     Example: UdpSend(port895, ip="127.0.0.1", port=20001)
     """
 
@@ -208,7 +207,6 @@ class RdaReceive(Node):
       - offset (float): offset (in second) to apply to incoming data timestamps, default is 0
       - host (str): RDA host, default is 'localhost', it could be the IP adress of the host
       - timeout (float): timeout in sec t get the RDA stream, default is 10
-
     Example:
         RdaReceive()
         RdaReceive(rdaport=52136, offset=.125, host='159.10.20')
@@ -218,6 +216,11 @@ class RdaReceive(Node):
         Node.__init__(self, None)
         self._buf_size_max = 2**15
         self._rdaport = rdaport
+        if rdaport == 51254: # Recview
+            self._denom = 2
+        elif rdaport == 51244: # Recorder
+            self._denom = 1
+
         self._offset = offset
         self._timeout = timeout
         self._host = host
@@ -290,7 +293,7 @@ class RdaReceive(Node):
     def update(self):
         # receive all data from socket
         raw = self._my_socket.recv(self._buf_size_max)
-        # concatenate with last value in persitence
+        # concatenate with last value in persistence
         raw = self._persistent + raw
         # initialize loop
         data_to_send = []
@@ -321,7 +324,8 @@ class RdaReceive(Node):
                             self._time = time() - points / self._frequency
                         timestamps += [self._time - self._offset + i / self._frequency for i in range(points)]
                         for marker in markers:
-                            self.marker_output.set([marker['message'][1]] * marker['points'], [timestamps[marker['position'] + i - 1] for i in range(int(marker['points']))])
+                            # /Gustavo: for each marker, get 1 message and 1 timestamp
+                            self.marker_output.set([marker['message'][1]], [timestamps[marker['position']]])
                         # self._time points to the timestamp of first row from next block
                         self._time = timestamps[-1] + self._offset + 1 / self._frequency
                 else:
@@ -391,9 +395,10 @@ class RdaReceive(Node):
         markers = []
         index = 12 + 4 * points * len(self._channels)
         for m in range(markerCount):
-            markersize = unpack('<L', rawdata[index:index + 4])
-            (position, points2, channel) = unpack('<LLl', rawdata[index + 4:index + 16])
-            typedesc = self._split_string(rawdata[index + 16:index + markersize[0]])
+            # /Gustavo: Correct markersize, according to data coming from Recorder or Recview
+            (markersize, position, points2, channel) = unpack('<LLLl', rawdata[index:index + 16])
+            true_markersize = (markersize - 16) // self._denom + 16
+            typedesc = self._split_string(rawdata[index + 16:index + true_markersize])
             markers.append({'position': position, 'points': points2, 'message': typedesc})
-            index = index + markersize[0]
+            index = index + true_markersize
         return (block, points, data, markers)
