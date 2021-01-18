@@ -211,6 +211,8 @@ class Config(object):
         t = 0
         for marker in self._init:
             scenario.append([marker.get_name(), t])
+            # Gustavo
+            print('marker: ', marker)
             t += marker.get_duration()
 
         # send loop
@@ -260,8 +262,11 @@ class Marker(object):
         self.max_duration = max_duration
 
     def get_duration(self):
-        if self.duration:
+        # Gustavo:
+        if self.duration is not None:
             return self.duration
+        # if self.duration:         # if 0 gives False, but we might want durations = 0!!
+        #     return self.duration
         else:
             return rd.uniform(self.min_duration, self.max_duration)
 
@@ -423,3 +428,4 @@ class Stimulator(Node):
             self.plot_pipe.send(None,)
         except BrokenPipeError:
             pass
+
